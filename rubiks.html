@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Rubik's Cube Speed Tracker</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.3.0/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --red: #e74c3c;
+      --green: #2ecc71;
+      --blue: #3498db;
+      --yellow: #f1c40f;
+      --orange: #e67e22;
+      --purple: #9b59b6;
+      --white: #ecf0f1;
+      --dark: #2c3e50;
+      --light-gray: #bdc3c7;
+    }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: var(--dark);
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+
+    #controls {
+      text-align: center;
+      background: rgba(255, 255, 255, 0.95);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+      margin: 5px 8px 0px 8px;
+      border-radius: 12px;
+      padding: 8px 15px;
+      backdrop-filter: blur(10px);
+    }
+    #timer {
+      font-size: 1.8rem;
+      font-weight: bold;
+      color: var(--dark);
+    }
+    #fastest {
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: var(--blue);
+    }
+    button {
+      padding: 0.4rem 0.8rem;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+      transition: all 0.2s;
+      margin: 0 2px;
+    }
+    button:hover { opacity: 0.9; }
+    #resetBtn { background: var(--orange); color: #fff; }
+    #undoBtn { background: var(--red); color: #fff; }
+    .export-btn { background: var(--blue); color: #fff; }
+    #instructions { color: var(--dark); padding: 10px; }
+    #charts {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(auto, 33%));
+      gap: 1rem;
+      padding: 0.5rem;
+    }
+    .chart-container {
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 12px;
+      padding: 20px;
+      position: relative;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+      border-left: 8px solid transparent;
+      backdrop-filter: blur(10px);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      height: 380px;
+    }
+    .chart-container:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 48px rgba(0,0,0,0.15);
+    }
+    .chart-container:nth-child(1) { border-left-color: var(--red); }
+    .chart-container:nth-child(2) { border-left-color: var(--green); }
+    .chart-container:nth-child(3) { border-left-color: var(--blue); }
+    .chart-container:nth-child(4) { border-left-color: var(--yellow); }
+    .chart-container:nth-child(5) { border-left-color: var(--orange); }
+    .chart-container:nth-child(6) { border-left-color: var(--purple); }
+    .chart-container canvas {
+      width: 100% !important;
+      max-height: 320px !important;
+    }
+    .export-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      font-size: 0.8rem;
+      padding: 0.3rem 0.7rem;
+    }
+  </style>
+</head>
+<body>
+  <div id="controls">
+    <div style="display: flex; justify-content: space-between; align-items: center; max-width: 800px; margin: 0 auto;">
+      <div id="fastest">Fastest: 0.000 s</div>
+      <div id="timer">0.000 s</div>
+      <div style="display: flex; gap: 5px; align-items: center;">
+        <button id="resetBtn">Reset Data</button>
+        <button id="undoBtn">Undo Last</button>
+        <span style="margin-left: 10px; font-size: 0.9rem;">Press <strong>Spacebar</strong> to start/stop</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="charts">
+    <div class="chart-container">
+      <button class="export-btn" data-chart="raw">Export</button>
+      <h2>Solve Times</h2>
+      <canvas id="rawChart"></canvas>
+    </div>
+    <div class="chart-container">
+      <button class="export-btn" data-chart="avg">Export</button>
+      <h2>Moving Average (5 solves)</h2>
+      <canvas id="avgChart"></canvas>
+    </div>
+    <div class="chart-container">
+      <button class="export-btn" data-chart="progress">Export</button>
+      <h2>Progress Tracker</h2>
+      <canvas id="progressChart"></canvas>
+    </div>
+    <div class="chart-container">
+      <button class="export-btn" data-chart="daily">Export</button>
+      <h2>Weekly Calendar (Daily Averages)</h2>
+      <canvas id="dailyChart"></canvas>
+    </div>
+    <div class="chart-container">
+      <button class="export-btn" data-chart="hist">Export</button>
+      <h2>Time Distribution (Histogram)</h2>
+      <canvas id="histChart"></canvas>
+    </div>
+    <div class="chart-container">
+      <button class="export-btn" data-chart="streaks">Export</button>
+      <h2>Improvement Streaks</h2>
+      <canvas id="streaksChart"></canvas>
+    </div>
+  </div>
+
+  <script>
+    let isRunning = false;
+    let startTime = 0;
+    let timerInterval;
+    let times = JSON.parse(localStorage.getItem('cubeTimes')) || [];
+    let dailyAverages = JSON.parse(localStorage.getItem('dailyAverages')) || [0, 0, 0, 0, 0, 0, 0]; // Mon-Sun
+    let dailyCounts = JSON.parse(localStorage.getItem('dailyCounts')) || [0, 0, 0, 0, 0, 0, 0]; // Mon-Sun
+    const windowSize = 5;
+
+    const timerEl = document.getElementById('timer');
+    const fastestEl = document.getElementById('fastest');
+    document.getElementById('resetBtn').addEventListener('click', resetData);
+    document.getElementById('undoBtn').addEventListener('click', undoLast);
+    document.querySelectorAll('.export-btn').forEach(btn => {
+      btn.addEventListener('click', () => exportChart(btn.dataset.chart));
+    });
+
+    // Chart instances
+    const charts = {};
+    function createChart(ctx, type, data, options = {}) {
+      return new Chart(ctx, { type, data, options });
+    }
+
+    charts.raw = createChart(
+      document.getElementById('rawChart').getContext('2d'), 'line',
+      { 
+        labels: [], 
+        datasets: [{ 
+          label: 'Solve (s)', 
+          data: [], 
+          fill: false,
+          borderColor: '#e74c3c',
+          backgroundColor: 'rgba(231, 76, 60, 0.1)',
+          tension: 0.4,
+          pointBackgroundColor: '#e74c3c',
+          pointBorderColor: '#fff',
+          pointBorderWidth: 2,
+          pointRadius: 4
+        }] 
+      },
+      { 
+        maintainAspectRatio: false, 
+        responsive: true,
+        scales: { y: { beginAtZero: true } } 
+      }
+    );
+
+    charts.avg = createChart(
+      document.getElementById('avgChart').getContext('2d'), 'line',
+      { 
+        labels: [], 
+        datasets: [{ 
+          label: `Avg of Last ${windowSize}`, 
+          data: [], 
+          fill: false,
+          borderColor: '#2ecc71',
+          backgroundColor: 'rgba(46, 204, 113, 0.1)',
+          tension: 0.4,
+          pointBackgroundColor: '#2ecc71',
+          pointBorderColor: '#fff',
+          pointBorderWidth: 2,
+          pointRadius: 4
+        }] 
+      },
+      { 
+        maintainAspectRatio: false, 
+        responsive: true,
+        scales: { y: { beginAtZero: true } } 
+      }
+    );
+
+    charts.progress = createChart(
+      document.getElementById('progressChart').getContext('2d'), 'line',
+      { 
+        labels: [], 
+        datasets: [
+          { 
+            label: 'Personal Best', 
+            data: [], 
+            fill: false, 
+            borderColor: '#e74c3c',
+            backgroundColor: 'rgba(231, 76, 60, 0.1)',
+            tension: 0.4,
+            pointBackgroundColor: '#e74c3c',
+            pointBorderColor: '#fff',
+            pointBorderWidth: 2,
+            pointRadius: 4
+          },
+          { 
+            label: 'Monthly Average', 
+            data: [], 
+            fill: false, 
+            borderColor: '#3498db',
+            backgroundColor: 'rgba(52, 152, 219, 0.1)',
+            tension: 0.4,
+            pointBackgroundColor: '#3498db',
+            pointBorderColor: '#fff',
+            pointBorderWidth: 2,
+            pointRadius: 4
+          }
+        ] 
+      },
+      { 
+        maintainAspectRatio: false, 
+        responsive: true,
+        scales: { y: { beginAtZero: true } },
+        plugins: {
+          legend: { display: true }
+        }
+      }
+    );
+
+    charts.daily = createChart(
+      document.getElementById('dailyChart').getContext('2d'), 'bar',
+      { 
+        labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], 
+        datasets: [{ 
+          label: 'Daily Avg (s)', 
+          data: [0, 0, 0, 0, 0, 0, 0],
+          backgroundColor: [
+            'rgba(231, 76, 60, 0.8)',   // Monday - Red
+            'rgba(46, 204, 113, 0.8)',  // Tuesday - Green
+            'rgba(52, 152, 219, 0.8)',  // Wednesday - Blue
+            'rgba(241, 196, 15, 0.8)',  // Thursday - Yellow
+            'rgba(230, 126, 34, 0.8)',  // Friday - Orange
+            'rgba(155, 89, 182, 0.8)',  // Saturday - Purple
+            'rgba(52, 73, 94, 0.8)'     // Sunday - Dark
+          ],
+          borderColor: [
+            '#e74c3c', '#2ecc71', '#3498db', '#f1c40f', 
+            '#e67e22', '#9b59b6', '#34495e'
+          ],
+          borderWidth: 2
+        }] 
+      },
+      { 
+        maintainAspectRatio: false, 
+        responsive: true,
+        scales: { 
+          y: { 
+            beginAtZero: true,
+            title: { display: true, text: 'Average Time (s)' }
+          },
+          x: {
+            title: { display: true, text: 'Day of Week' }
+          }
+        },
+        plugins: {
+          legend: { display: false }
+        }
+      }
+    );
+
+    charts.hist = createChart(
+      document.getElementById('histChart').getContext('2d'), 'bar',
+      { 
+        labels: [], 
+        datasets: [{ 
+          label: 'Count', 
+          data: [],
+          backgroundColor: 'rgba(230, 126, 34, 0.8)',
+          borderColor: '#e67e22',
+          borderWidth: 2
+        }] 
+      },
+      { 
+        maintainAspectRatio: false, 
+        responsive: true,
+        scales: { 
+          x: { title: { display: true, text: 'Time (s) bins' } }, 
+          y: { title: { display: true, text: 'Frequency' } } 
+        } 
+      }
+    );
+
+    charts.streaks = createChart(
+      document.getElementById('streaksChart').getContext('2d'), 'line',
+      { 
+        labels: [], 
+        datasets: [
+          { 
+            label: 'Improvement Streak', 
+            data: [], 
+            fill: true,
+            borderColor: '#2ecc71',
+            backgroundColor: 'rgba(46, 204, 113, 0.3)',
+            tension: 0.4,
+            pointBackgroundColor: '#2ecc71',
+            pointBorderColor: '#fff',
+            pointBorderWidth: 2,
+            pointRadius: 5
+          },
+          { 
+            label: 'Sub-PB Streak', 
+            data: [], 
+            fill: true,
+            borderColor: '#e74c3c',
+            backgroundColor: 'rgba(231, 76, 60, 0.3)',
+            tension: 0.4,
+            pointBackgroundColor: '#e74c3c',
+            pointBorderColor: '#fff',
+            pointBorderWidth: 2,
+            pointRadius: 5
+          }
+        ] 
+      },
+      { 
+        maintainAspectRatio: false,
+        responsive: true,
+        scales: { 
+          y: { 
+            beginAtZero: true,
+            title: { display: true, text: 'Streak Length' }
+          }
+        },
+        plugins: {
+          legend: { 
+            display: true,
+            position: 'top'
+          }
+        }
+      }
+    );
+
+    // Load existing data
+    if (times.length > 0) {
+      updateCharts();
+    }
+
+    document.addEventListener('keydown', e => {
+      if (e.code === 'Space') { e.preventDefault(); toggleTimer(); }
+    });
+
+    function toggleTimer() {
+      isRunning ? stopTimer() : startTimer();
+    }
+
+    function startTimer() {
+      isRunning = true;
+      startTime = performance.now();
+      timerEl.textContent = '0.000 s';
+      timerInterval = setInterval(() => {
+        timerEl.textContent = ((performance.now() - startTime) / 1000).toFixed(3) + ' s';
+      }, 50);
+    }
+
+    function stopTimer() {
+      isRunning = false;
+      clearInterval(timerInterval);
+      const t = (performance.now() - startTime) / 1000;
+      times.push(t);
+      localStorage.setItem('cubeTimes', JSON.stringify(times));
+      
+      // Update daily averages
+      const today = new Date();
+      const dayOfWeek = (today.getDay() + 6) % 7; // Convert Sunday=0 to Monday=0
+      
+      if (dailyCounts[dayOfWeek] === 0) {
+        dailyAverages[dayOfWeek] = t;
+        dailyCounts[dayOfWeek] = 1;
+      } else {
+        const currentTotal = dailyAverages[dayOfWeek] * dailyCounts[dayOfWeek];
+        dailyCounts[dayOfWeek]++;
+        dailyAverages[dayOfWeek] = (currentTotal + t) / dailyCounts[dayOfWeek];
+      }
+      
+      localStorage.setItem('dailyAverages', JSON.stringify(dailyAverages));
+      localStorage.setItem('dailyCounts', JSON.stringify(dailyCounts));
+      
+      timerEl.textContent = t.toFixed(3) + ' s';
+      updateCharts();
+    }
+
+    function updateCharts() {
+      const labels = times.map((_, i) => i + 1);
+
+      // Raw
+      charts.raw.data.labels = labels;
+      charts.raw.data.datasets[0].data = times;
+      charts.raw.update();
+
+      // Moving avg
+      const avgs = times.map((_, i) => {
+        const subset = times.slice(Math.max(0, i - windowSize + 1), i + 1);
+        return subset.reduce((a, b) => a + b) / subset.length;
+      });
+      charts.avg.data.labels = labels;
+      charts.avg.data.datasets[0].data = avgs;
+      charts.avg.update();
+
+      // Progress Tracker
+      let best = Infinity;
+      const bests = times.map(t => best = Math.min(best, t));
+      
+      // Monthly averages (last 30 solves)
+      const monthlyAvgs = times.map((_, i) => {
+        const monthStart = Math.max(0, i - 29); // Last 30 solves for monthly
+        const monthTimes = times.slice(monthStart, i + 1);
+        return monthTimes.reduce((a, b) => a + b) / monthTimes.length;
+      });
+      
+      charts.progress.data.labels = labels;
+      charts.progress.data.datasets[0].data = bests;
+      charts.progress.data.datasets[1].data = monthlyAvgs;
+      charts.progress.update();
+
+      // Update fastest display
+      if (times.length > 0) {
+        let best = Infinity;
+        const bests = times.map(t => best = Math.min(best, t));
+        fastestEl.textContent = `Fastest: ${bests[bests.length - 1].toFixed(3)} s`;
+      } else {
+        fastestEl.textContent = 'Fastest: 0.000 s';
+      }
+
+      // Daily Calendar
+      charts.daily.data.datasets[0].data = dailyAverages.map(avg => avg || 0);
+      charts.daily.update();
+
+      // Histogram
+      const bins = 10;
+      const maxT = Math.max(...times);
+      const binSize = maxT / bins;
+      const counts = Array(bins).fill(0);
+      times.forEach(t => counts[Math.min(bins - 1, Math.floor(t / binSize))]++);
+      charts.hist.data.labels = counts.map((_, i) => (i * binSize).toFixed(2));
+      charts.hist.data.datasets[0].data = counts;
+      charts.hist.update();
+
+      // Improvement Streaks
+      if (times.length > 1) {
+        const improvementStreak = [];
+        const subPBStreak = [];
+        let currentImprovement = 0;
+        let currentSubPB = 0;
+        let personalBest = times[0];
+        
+        for (let i = 1; i < times.length; i++) {
+          // Improvement streak (better than previous solve)
+          if (times[i] < times[i-1]) {
+            currentImprovement++;
+          } else {
+            currentImprovement = 0;
+          }
+          improvementStreak.push(currentImprovement);
+          
+          // Sub-PB streak (better than personal best)
+          if (times[i] < personalBest) {
+            personalBest = times[i];
+            currentSubPB++;
+          } else {
+            currentSubPB = 0;
+          }
+          subPBStreak.push(currentSubPB);
+        }
+        
+        charts.streaks.data.labels = labels.slice(1); // Skip first solve
+        charts.streaks.data.datasets[0].data = improvementStreak;
+        charts.streaks.data.datasets[1].data = subPBStreak;
+        charts.streaks.update();
+      }
+    }
+
+    function resetData() {
+      times = [];
+      dailyAverages = [0, 0, 0, 0, 0, 0, 0];
+      dailyCounts = [0, 0, 0, 0, 0, 0, 0];
+      localStorage.removeItem('cubeTimes');
+      localStorage.removeItem('dailyAverages');
+      localStorage.removeItem('dailyCounts');
+      timerEl.textContent = '0.000 s';
+      fastestEl.textContent = 'Fastest: 0.000 s';
+      Object.values(charts).forEach(c => {
+        c.data.labels = [];
+        c.data.datasets.forEach(d => d.data = []);
+        c.update();
+      });
+      
+      // Reset daily chart specifically
+      charts.daily.data.datasets[0].data = [0, 0, 0, 0, 0, 0, 0];
+      charts.daily.update();
+    }
+
+    function undoLast() {
+      if (times.length === 0) return;
+      times.pop();
+      localStorage.setItem('cubeTimes', JSON.stringify(times));
+      updateCharts();
+      timerEl.textContent = '0.000 s';
+    }
+
+    function exportChart(key) {
+      const chart = charts[key];
+      if (!chart) return;
+      const url = chart.toBase64Image();
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `chart_${key}.png`;
+      link.click();
+    }
+  </script>
+</body>
+</html>
