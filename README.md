@@ -2,6 +2,8 @@
 
 A comprehensive web-based timer and analytics dashboard for tracking Rubik's cube solving progress. This application provides detailed insights into your solving performance with multiple visualization charts and real-time statistics.
 
+<img width="1916" height="934" alt="image" src="https://github.com/user-attachments/assets/1fd20c25-74b0-479e-b108-0686dc69e668" />
+
 ## Features
 
 ### Timer Functionality
