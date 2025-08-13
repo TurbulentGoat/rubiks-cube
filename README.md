@@ -11,7 +11,7 @@ A comprehensive web-based timer and analytics dashboard for tracking Rubik's cub
 - **Undo Function**: Remove the last solve if you made a mistake
 
 ### Analytics Dashboard
-The application displays six different charts to analyze your solving performance:
+The application displays six different charts to analyse your solving performance:
 
 1. **Solve Times**: Line chart showing all your individual solve times
 2. **Moving Average (5 solves)**: Smoothed trend line using a 5-solve rolling average
@@ -23,7 +23,7 @@ The application displays six different charts to analyze your solving performanc
 ### Visual Design
 - **Modern Interface**: Glassmorphism design with gradient background
 - **Responsive Charts**: Interactive charts with hover tooltips
-- **Color-Coded Sections**: Each chart has unique color coding for easy identification
+- **Colour-Coded Sections**: Each chart has colour coding based on the Rubik's cube colors
 - **Export Functionality**: Export any chart as a PNG image
 
 ## Usage
@@ -58,7 +58,7 @@ The Weekly Calendar chart intelligently tracks your performance by day of the we
 - **Daily Counts**: Stored as JSON array in localStorage under 'dailyCounts'
 
 ### Chart Library
-Built using Chart.js v4.3.0 for responsive, interactive visualizations.
+Built using Chart.js v4.3.0 for responsive, interactive visualisations.
 
 ### Browser Compatibility
 Works in all modern browsers that support:
@@ -74,16 +74,16 @@ rubiks/
 └── README.md      # This documentation file
 ```
 
-## Customization
+## Customisation
 
-### Modifying Chart Colors
-Colors are defined in CSS custom properties at the top of the file:
+### Modifying Chart Colours
+Colours are defined in CSS custom properties at the top of the file:
 ```css
 :root {
   --red: #e74c3c;
   --green: #2ecc71;
   --blue: #3498db;
-  /* ... other colors */
+  /* ... other colours */
 }
 ```
 
